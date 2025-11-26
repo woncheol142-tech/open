@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>위더스 탁구 동호회 대시보드</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans KR', sans-serif;
+            background-color: #f8fafc;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 350px;
+            max-height: 400px;
+        }
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 300px;
+            }
+        }
+        .styled-checkbox {
+            appearance: none;
+            background-color: #e5e7eb;
+            width: 2.75rem;
+            height: 1.5rem;
+            border-radius: 9999px;
+            position: relative;
+            cursor: pointer;
+            transition: background-color 0.2s ease-in-out;
+        }
+        .styled-checkbox::before {
+            content: '';
+            position: absolute;
+            width: 1.25rem;
+            height: 1.25rem;
+            border-radius: 50%;
+            background-color: white;
+            top: 0.125rem;
+            left: 0.125rem;
+            transition: transform 0.2s ease-in-out;
+        }
+        .styled-checkbox:checked {
+            background-color: #3b82f6;
+        }
+        .styled-checkbox:checked::before {
+            transform: translateX(1.25rem);
+        }
+        .number-input {
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            padding: 0.5rem 0.75rem;
+            width: 100%;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .number-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.4);
+        }
+
+        /* --- 대진표 쪽 공통 스타일 --- */
+        .player-btn {
+            width: 100%;
+            text-align: left;
+            border-radius: 8px;
+            border: none;
+            padding: 5px 7px;
+            background: #fff;
+            font-size: 0.82rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: transform 0.05s ease, box-shadow 0.05s ease, background 0.15s ease;
+        }
+        .player-name {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .player-seed {
+            font-size: 0.7rem;
+            color: #999;
+            margin-left: 6px;
+        }
+        .player-btn.empty {
+            background: #f7f7f7;
+            color: #999;
+            cursor: default;
+        }
+        .player-btn:not(.empty):hover {
+            background: #f3f6ff;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+            transform: translateY(-1px);
+        }
+        .player-btn.winner {
+            background: #e4f2ff;
+            border: 1px solid #4a90e2;
+            box-shadow: 0 0 0 1px #4a90e233;
+            font-weight: 600;
+        }
+        .match.finished .player-btn:not(.winner) {
+            opacity: 0.55;
+        }
+        .match.finished .player-btn:not(.winner):hover {
+            transform: none;
+            box-shadow: none;
+            background: #fff;
+        }
+    </style>
+</head>
+
+<body class="text-slate-700">
+<div class="container mx-auto p-4 md:p-8">
+    <!-- 헤더 + 어드민 버튼 -->
+    <header class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
+        <div>
+            <h1 class="text-3xl md:text-4xl font-bold text-slate-800">위더스 탁구 동호회 </h1>
+            <p class="mt-2 text-slate-500 text-sm md:text-base">
+                
+            </p>
+        </div>
+        <button
+            id="admin-toggle"
+            class="self-start md:self-auto inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs md:text-sm text-slate-700 hover:bg-slate-50 shadow-sm">
+            🔒 관리자
+        </button>
+    </header>
+
+    <!-- 탭 버튼 -->
+    <nav class="flex gap-2 mb-6 border-b border-slate-200 pb-2">
+        <button id="tab-budget" class="px-4 py-2 rounded-t-lg text-sm md:text-base font-medium bg-white border border-slate-200 border-b-0 shadow-sm">
+            예산 관리
+        </button>
+        <button id="tab-bracket" class="px-4 py-2 rounded-t-lg text-sm md:text-base font-medium text-slate-500 hover:text-slate-800">
+            대진표 / 추첨
+        </button>
+    </nav>
+
+    <main>
+        <!-- ================== 예산 관리 섹션 ================== -->
+        <section id="budget-section">
+            <!-- Save Button -->
+            <div class="flex justify-end mb-6">
+                <button id="save-button" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out">
+                    저장하기 (브라우저에 임시 저장)
+                </button>
+            </div>
+
+            <!-- Key Metrics Section -->
+            <section id="key-metrics" class="mb-8">
+                <h2 class="text-2xl font-semibold mb-4 text-slate-800">요약 현황</h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="text-sm font-medium text-slate-500">동호회 통장 잔액 (입력)</h3>
+                        <input id="club-balance-input" type="text" value="1520350" class="number-input text-3xl font-bold text-slate-800 mt-2 p-0 bg-transparent text-right w-full">
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="text-sm font-medium text-slate-500">총 지출</h3>
+                        <p id="total-expense" class="text-3xl font-bold text-red-500 mt-2">₩0</p>
+                    </div>
+                    <div class="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="text-sm font-medium text-slate-500">회사 지원금 합계</h3>
+                        <p id="total-support" class="text-3xl font-bold text-blue-500 mt-2">₩0</p>
+                    </div>
+                    <div class="bg-green-50 p-6 rounded-xl shadow-sm border border-green-200">
+                        <h3 class="text-sm font-medium text-green-700">남은 최종 잔액</h3>
+                        <p id="remaining-balance" class="text-3xl font-bold text-green-600 mt-2">₩0</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Visualizations Section -->
+            <section id="visualizations" class="mb-8">
+                <h2 class="text-2xl font-semibold mb-4 text-slate-800">비용 분석</h2>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
+                    <div class="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="text-lg font-semibold text-center mb-4">항목별 지출 구성</h3>
+                        <div class="chart-container">
+                            <canvas id="expense-breakdown-chart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-200">
+                        <h3 class="text-lg font-semibold text-center mb-4">지원금 / 동호회 부담 비율</h3>
+                        <div class="chart-container">
+                            <canvas id="funding-ratio-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Interactive Data Table Section -->
+            <section id="data-table">
+                <h2 class="text-2xl font-semibold mb-4 text-slate-800">상세 지출 내역</h2>
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-slate-50 border-b border-slate-200 text-xs text-slate-600 uppercase">
+                        <tr>
+                            <th class="p-4">항목</th>
+                            <th class="p-4 text-right">인원수</th>
+                            <th class="p-4 text-right">실제 지출</th>
+                            <th class="p-4 text-center">회사 지원</th>
+                            <th class="p-4 text-right">회사 지원금</th>
+                            <th class="p-4 text-right">동호회 부담</th>
+                            <th class="p-4 hidden md:table-cell">비고</th>
+                        </tr>
+                        </thead>
+                        <tbody id="budget-table-body" class="divide-y divide-slate-200">
+                        <!-- JS에서 생성 -->
+                        </tbody>
+                        <tfoot class="bg-slate-100 font-bold">
+                        <tr>
+                            <td class="p-4">총계</td>
+                            <td class="p-4"></td>
+                            <td id="total-expense-footer" class="p-4 text-right">₩0</td>
+                            <td class="p-4"></td>
+                            <td id="total-support-footer" class="p-4 text-right">₩0</td>
+                            <td id="total-burden-footer" class="p-4 text-right">₩0</td>
+                            <td class="p-4 hidden md:table-cell"></td>
+                        </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </section>
+
+            <!-- AI 지원 섹션 -->
+            <section id="ai-helper" class="mt-8">
+                <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-2">
+                    <div>
+                        <h2 class="text-2xl font-semibold text-slate-800">AI 도움 받기</h2>
+                        <p class="text-slate-500 text-sm md:text-base mt-1">현재 예산, 참가자, 경기 결과를 한 번에 요약한 프롬프트입니다. 이 텍스트를 복사해 사내 LLM/외부 AI API에 붙여넣어 분석, 통계 설명, 요약 공지 초안 작성 등을 요청하세요.</p>
+                    </div>
+                    <div class="flex gap-2 self-start md:self-auto">
+                        <button id="ai-refresh" class="bg-white border border-slate-300 text-slate-700 px-3 py-2 text-sm rounded-lg shadow-sm hover:bg-slate-50">내용 새로고침</button>
+                        <button id="ai-copy" class="bg-blue-600 text-white px-3 py-2 text-sm rounded-lg shadow hover:bg-blue-700">프롬프트 복사</button>
+                    </div>
+                </div>
+                <div class="bg-white border border-dashed border-slate-300 rounded-xl p-4 shadow-sm">
+                    <div class="flex items-center justify-between text-xs text-slate-500 mb-2">
+                        <span>AI에게 보낼 요약</span>
+                        <span id="ai-status" class="text-[11px] text-blue-600">자동 생성됨</span>
+                    </div>
+                    <textarea id="ai-prompt" class="w-full h-48 text-sm text-slate-800 border border-slate-200 rounded-lg p-3 bg-slate-50" readonly></textarea>
+                    <p class="text-[11px] text-slate-500 mt-2 leading-5">
+                        · 사내 프록시나 서버 측 엔드포인트에 <code>ai-helper</code> 텍스트를 POST하도록 연결해 두면, 버튼만으로도 AI 호출을 자동화할 수 있습니다.<br>
+                        · 예: <code>fetch('/api/ai', { method: 'POST', body: JSON.stringify({ prompt: document.getElementById('ai-prompt').value }) })</code><br>
+                        · 호출 결과를 <em>대진표 공지</em>나 <em>예산 보고서</em>에 반영하는 식으로 확장해 보세요.
+                    </p>
+                </div>
+            </section>
+        </section>
+
+        <!-- ================== 대진표 / 추첨 섹션 ================== -->
+        <section id="bracket-section" class="hidden">
+            <section class="mb-8">
+                <h2 class="text-2xl font-semibold mb-4 text-slate-800">대진표 / 추첨 번호 생성기</h2>
+                <p class="text-slate-500 mb-4 text-sm md:text-base">
+                    참가자 이름을 입력하면 ▶ 랜덤 추첨번호 ▶ 16강 토너먼트 자동 구성 ▶ 경기 결과를 클릭해 우승·준우승을 자동으로 표시합니다.
+                </p>
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6">
+                    <!-- 참가자 입력 -->
+                    <div class="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="font-semibold text-slate-800">1. 참가자 이름 입력</span>
+                            <span class="text-xs text-slate-500">한 줄에 한 명씩 (최대 16명, 14명 권장)</span>
+                        </div>
+
+                        <!-- 🔹 단식 / 복식 선택 -->
+                        <div class="flex items-center gap-4 mb-3 text-xs text-slate-600">
+                            <label class="inline-flex items-center gap-1">
+                                <input type="radio" name="matchType" value="single" class="h-3 w-3" checked>
+                                <span>단식</span>
+                            </label>
+
+                            <label class="inline-flex items-center gap-1">
+                                <input type="radio" name="matchType" value="double" class="h-3 w-3">
+                                <span>복식</span>
+                            </label>
+
+                            <span class="text-[11px] text-slate-400">
+                                복식 선택 시 입력된 이름 두 명씩 한 팀으로 자동 묶입니다.
+                            </span>
+                        </div>
+
+                        <textarea id="bracket-playerInput"
+                                  class="w-full min-h-[150px] resize-y p-2 border border-slate-300 rounded-lg text-sm"
+                                  placeholder="예)
+홍길동
+김철수
+… 이런 식으로 줄마다 한 명씩 입력하세요."></textarea>
+                        <div class="flex flex-wrap gap-2 mt-3">
+                            <button id="bracket-generateBtn"
+                                    class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm rounded-lg shadow">
+                                랜덤 추첨 &amp; 대진표 생성
+                            </button>
+                            <button id="bracket-resetBtn"
+                                    class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 text-sm rounded-lg border border-slate-300">
+                                초기화
+                            </button>
+                        </div>
+                        <p class="mt-2 text-xs text-slate-500 leading-5">
+                            · 14명 입력 시 자동으로 <b>16강 토너먼트</b> + <b>부전승</b>으로 구성됩니다.<br>
+                            · 이미 생성된 상태에서 다시 누르면 <b>새로 랜덤 추첨</b>합니다.<br>
+                            · 위쪽 <b>저장하기</b> 버튼 누르면 이 이름 목록도 같이 저장됩니다.
+                        </p>
+                    </div>
+
+                    <!-- 시드 표 -->
+                    <div class="bg-white p-4 md:p-6 rounded-xl shadow-sm border border-slate-200">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="font-semibold text-slate-800">2. 추첨 번호 / 시드 확인</span>
+                            <span class="text-xs text-slate-500">대진표에서의 자리 번호</span>
+                        </div>
+                        <div id="bracket-seedContainer" class="text-sm">
+                            <p class="text-xs text-slate-500">
+                                왼쪽에 참가자 이름을 입력하고<br>
+                                <b>「랜덤 추첨 &amp; 대진표 생성」</b> 버튼을 눌러주세요.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 대진표 -->
+                <div id="bracket-bracket" class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6 hidden">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="font-semibold text-slate-800">3. 경기 결과 입력</span>
+                        <span class="text-xs text-slate-500">각 경기에서 이긴 사람 버튼을 클릭하세요.</span>
+                    </div>
+                    <div id="bracket-bracketInner" class="overflow-x-auto pb-2">
+                        <!-- JS로 생성 -->
+                    </div>
+                </div>
+
+                <!-- 최종 결과 -->
+                <div id="bracket-result" class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 md:p-6 mt-4 hidden">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="font-semibold text-slate-800">4. 최종 결과</span>
+                        <span class="text-xs text-slate-500">결승 결과가 입력되면 자동으로 표시됩니다.</span>
+                    </div>
+                    <div class="flex flex-wrap gap-3">
+                        <div class="flex-1 min-w-[160px] bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                            <div class="text-xs text-green-700 mb-1">우승</div>
+                            <div id="bracket-winnerName" class="text-lg font-bold text-green-700">-</div>
+                        </div>
+                        <div class="flex-1 min-w-[160px] bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+                            <div class="text-xs text-slate-600 mb-1">준우승</div>
+                            <div id="bracket-runnerUpName" class="text-lg font-bold text-slate-800">-</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </section>
+    </main>
+</div>
+
+<!-- ================== 예산 관리 스크립트 ================== -->
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const fixedFoodSupportRate = 25000;
+        const fixedVenueSupportRate = 15000;
+
+        let budgetData = [
+            { id: 1, item: '식비',       costPerPerson: 20000, people: 11, actualExpense: 200000, isCompanySupported: true,  notes: '점심 식사' },
+            { id: 2, item: '장소 대여료', costPerPerson: 15000, people: 1,  actualExpense: 15000,  isCompanySupported: true,  notes: '체육관' },
+            { id: 3, item: '참가비',     costPerPerson: 10000, people: 10, actualExpense: 100000, isCompanySupported: false, notes: '대회 참가료' },
+            { id: 4, item: '상품',       costPerPerson: 50000, people: 3,  actualExpense: 150000, isCompanySupported: false, notes: '시상용' },
+            { id: 5, item: '기타',       costPerPerson: 10000, people: 2,  actualExpense: 20000,  isCompanySupported: false, notes: '예비비·소모품' },
+        ];
+
+        const STORAGE_KEY = 'withersDashboard';   // 예산 + 이름 같이 저장
+        const clubBalanceInput = document.getElementById('club-balance-input');
+        const saveButton = document.getElementById('save-button');
+        const aiPromptEl = document.getElementById('ai-prompt');
+        const aiRefreshBtn = document.getElementById('ai-refresh');
+        const aiCopyBtn = document.getElementById('ai-copy');
+        const aiStatusEl = document.getElementById('ai-status');
+
+        const formatNumber = (amount) => {
+            return new Intl.NumberFormat('ko-KR').format(amount);
+        };
+        const formatCurrency = (amount) => {
+            return new Intl.NumberFormat('ko-KR', { style: 'currency', currency: 'KRW' }).format(amount);
+        };
+        const parseNumericValue = (rawValue) => {
+            const numericString = String(rawValue).replace(/[^\d]/g, '');
+            return parseInt(numericString) || 0;
+        };
+
+        const getBudgetSnapshot = () => {
+            const totalExpense = budgetData.reduce((sum, d) => sum + d.actualExpense, 0);
+            const totalSupport = budgetData.reduce((sum, d) => sum + d.companySupportAmount, 0);
+            const totalBurden = budgetData.reduce((sum, d) => sum + d.clubBurden, 0);
+            const initialClubBalance = parseNumericValue(clubBalanceInput.value);
+            const remainingBalance = initialClubBalance + totalSupport - totalExpense;
+
+            return {
+                totals: { initialClubBalance, totalExpense, totalSupport, totalBurden, remainingBalance },
+                rows: budgetData.map((d) => ({
+                    item: d.item,
+                    people: d.people,
+                    actualExpense: d.actualExpense,
+                    isCompanySupported: d.isCompanySupported,
+                    companySupportAmount: d.companySupportAmount,
+                    clubBurden: d.clubBurden,
+                    notes: d.notes
+                }))
+            };
+        };
+
+        const getBracketSnapshot = () => {
+            const bracketInputEl = document.getElementById('bracket-playerInput');
+            const winnerNameEl = document.getElementById('bracket-winnerName');
+            const runnerUpNameEl = document.getElementById('bracket-runnerUpName');
+
+            const players = bracketInputEl
+                ? bracketInputEl.value
+                    .split("\n")
+                    .map((v) => v.trim())
+                    .filter((v) => v.length > 0)
+                : [];
+
+            return {
+                players,
+                winner: winnerNameEl ? winnerNameEl.textContent : "-",
+                runnerUp: runnerUpNameEl ? runnerUpNameEl.textContent : "-"
+            };
+        };
+
+        const buildAiPrompt = () => {
+            const budget = getBudgetSnapshot();
+            const bracket = getBracketSnapshot();
+            const payload = {
+                context: "Withers 탁구 동호회 이벤트 데이터 요약",
+                budget,
+                bracket,
+                guidance: [
+                    "예산 지출 패턴 요약", "지원금/부담 비율 설명", "참가자 및 우승자 공지 초안", "추가 구매/절약 제안"
+                ]
+            };
+
+            return [
+                "아래 JSON을 분석해 5줄 이내로 한국어 요약을 작성하고, 필요한 경우 추가 질문을 제안하세요.",
+                JSON.stringify(payload, null, 2)
+            ].join("\n\n");
+        };
+
+        const updateAiPrompt = () => {
+            if (!aiPromptEl) return;
+            aiPromptEl.value = buildAiPrompt();
+            if (aiStatusEl) {
+                aiStatusEl.textContent = `자동 생성됨 · ${new Date().toLocaleTimeString('ko-KR')}`;
+            }
+        };
+
+        const copyAiPrompt = async () => {
+            if (!aiPromptEl) return;
+            const text = aiPromptEl.value;
+            try {
+                await navigator.clipboard.writeText(text);
+                if (aiStatusEl) aiStatusEl.textContent = '클립보드에 복사 완료';
+            } catch (err) {
+                if (aiStatusEl) aiStatusEl.textContent = '복사 실패: 브라우저 권한을 확인하세요';
+            }
+        };
+
+        const saveDataToStorage = () => {
+            const bracketInputEl = document.getElementById('bracket-playerInput');
+            const dataToSave = {
+                budgetData: budgetData,
+                clubBalance: parseNumericValue(clubBalanceInput.value),
+                bracketPlayers: bracketInputEl ? bracketInputEl.value : ""
+            };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(dataToSave));
+            saveButton.textContent = '✅ 저장 완료!';
+            setTimeout(() => {
+                saveButton.textContent = '저장하기 (브라우저에 임시 저장)';
+            }, 2000);
+        };
+
+        const loadDataFromStorage = () => {
+            const savedData = localStorage.getItem(STORAGE_KEY);
+            if (savedData) {
+                const parsedData = JSON.parse(savedData);
+                if (parsedData.budgetData) {
+                    budgetData = parsedData.budgetData;
+                }
+                if (typeof parsedData.clubBalance !== "undefined") {
+                    clubBalanceInput.value = parsedData.clubBalance;
+                }
+                if (typeof parsedData.bracketPlayers === "string") {
+                    const bracketInputEl = document.getElementById('bracket-playerInput');
+                    if (bracketInputEl) {
+                        bracketInputEl.value = parsedData.bracketPlayers;
+                    }
+                }
+            }
+        };
+
+        const updateDataAndRecalculate = (id, field, value) => {
+            const dataItem = budgetData.find(d => d.id === id);
+            if (dataItem) {
+                dataItem[field] = Math.max(0, value);
+            }
+            calculateValues();
+        };
+
+        const calculateValues = () => {
+            budgetData.forEach(d => {
+                let supportCap = 0;
+                let companySupportAmount = 0;
+
+                if (d.item === '식비') {
+                    supportCap = fixedFoodSupportRate * d.people;
+                } else if (d.item === '장소 대여료') {
+                    supportCap = fixedVenueSupportRate * d.people;
+                }
+
+                if (d.isCompanySupported) {
+                    if (d.item === '식비' || d.item === '장소 대여료') {
+                        companySupportAmount = supportCap;
+                    } else {
+                        companySupportAmount = d.actualExpense;
+                    }
+                }
+
+                d.companySupportAmount = companySupportAmount;
+
+                if (d.item === '장소 대여료' && d.isCompanySupported) {
+                    d.clubBurden = 0;
+                } else {
+                    d.clubBurden = Math.max(0, d.actualExpense - d.companySupportAmount);
+                }
+            });
+        };
+
+        const renderTable = () => {
+            const tableBody = document.getElementById('budget-table-body');
+            tableBody.innerHTML = '';
+            budgetData.forEach(d => {
+                const rowBgClass = d.isCompanySupported ? 'bg-[#EAF2FD]' : 'bg-[#F2F2F2]';
+                const row = document.createElement('tr');
+                row.className = `hover:bg-slate-50 ${rowBgClass}`;
+                row.innerHTML = `
+                    <td class="p-4 font-medium">${d.item}</td>
+                    <td class="p-4 text-right">
+                        <input type="number" value="${d.people}" data-id="${d.id}" data-field="people" class="number-input text-right w-16">
+                    </td>
+                    <td class="p-4 text-right">
+                        <input type="text" value="${formatNumber(d.actualExpense)}" data-id="${d.id}" data-field="actualExpense" class="number-input text-right w-40">
+                    </td>
+                    <td class="p-4 text-center">
+                        <input type="checkbox" ${d.isCompanySupported ? 'checked' : ''} data-id="${d.id}" data-field="isCompanySupported" class="styled-checkbox">
+                    </td>
+                    <td class="p-4 text-right text-blue-600">${formatCurrency(d.companySupportAmount)}</td>
+                    <td class="p-4 text-right text-orange-600">${formatCurrency(d.clubBurden)}</td>
+                    <td class="p-4 text-slate-500 hidden md:table-cell">${d.notes}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+
+            document.querySelectorAll('#budget-table-body input[data-field="people"]').forEach(input => {
+                input.addEventListener('input', handlePeopleChange);
+            });
+            document.querySelectorAll('#budget-table-body input[data-field="actualExpense"]').forEach(input => {
+                input.addEventListener('input', handleExpenseInput);
+                input.addEventListener('blur', handleExpenseBlur);
+            });
+            document.querySelectorAll('#budget-table-body input[type="checkbox"]').forEach(checkbox => {
+                checkbox.addEventListener('change', handleCheckboxChange);
+            });
+        };
+
+        const handlePeopleChange = (e) => {
+            const id = parseInt(e.target.dataset.id);
+            const value = parseNumericValue(e.target.value);
+            const dataItem = budgetData.find(d => d.id === id);
+
+            if (dataItem) {
+                dataItem.people = Math.max(0, value);
+
+                if (id === 2 || id === 3) {
+                    dataItem.actualExpense = dataItem.people * dataItem.costPerPerson;
+                }
+            }
+            updateDataAndRecalculate(id, 'people', dataItem.people);
+            fullUpdate();
+        };
+
+        const handleExpenseInput = (e) => {
+            const id = parseInt(e.target.dataset.id);
+            const value = parseNumericValue(e.target.value);
+            updateDataAndRecalculate(id, 'actualExpense', value);
+            updateUI();
+        };
+
+        const handleExpenseBlur = () => {
+            fullUpdate();
+        };
+
+        const getClubBalance = () => {
+            return parseNumericValue(clubBalanceInput.value);
+        };
+
+        const handleClubBalanceInput = () => {
+            updateUI();
+        };
+
+        const handleClubBalanceBlur = () => {
+            const value = parseNumericValue(clubBalanceInput.value);
+            clubBalanceInput.value = formatCurrency(value);
+            fullUpdate();
+        };
+
+        const updateUI = () => {
+            const initialClubBalance = getClubBalance();
+
+            const totalExpense = budgetData.reduce((sum, d) => sum + d.actualExpense, 0);
+            const totalSupport = budgetData.reduce((sum, d) => sum + d.companySupportAmount, 0);
+            const totalBurden = budgetData.reduce((sum, d) => sum + d.clubBurden, 0);
+            const remainingBalance = initialClubBalance + totalSupport - totalExpense;
+
+            document.getElementById('total-expense').textContent = formatCurrency(totalExpense);
+            document.getElementById('total-support').textContent = formatCurrency(totalSupport);
+            document.getElementById('remaining-balance').textContent = formatCurrency(remainingBalance);
+
+            document.getElementById('total-expense-footer').textContent = formatCurrency(totalExpense);
+            document.getElementById('total-support-footer').textContent = formatCurrency(totalSupport);
+            document.getElementById('total-burden-footer').textContent = formatCurrency(totalBurden);
+
+            updateCharts(totalSupport, totalBurden);
+            updateAiPrompt();
+        };
+
+        const handleCheckboxChange = (e) => {
+            const id = parseInt(e.target.dataset.id);
+            const isChecked = e.target.checked;
+            const dataItem = budgetData.find(d => d.id === id);
+            if (dataItem) {
+                dataItem.isCompanySupported = isChecked;
+            }
+            fullUpdate();
+        };
+
+        const fullUpdate = () => {
+            calculateValues();
+            renderTable();
+            updateUI();
+        };
+
+        if (aiRefreshBtn) aiRefreshBtn.addEventListener('click', updateAiPrompt);
+        if (aiCopyBtn) aiCopyBtn.addEventListener('click', copyAiPrompt);
+        window.rebuildAiPrompt = updateAiPrompt;
+
+        let expenseChart, fundingChart;
+
+        const createCharts = () => {
+            const expenseCtx = document.getElementById('expense-breakdown-chart').getContext('2d');
+            expenseChart = new Chart(expenseCtx, {
+                type: 'bar',
+                data: {
+                    labels: budgetData.map(d => d.item),
+                    datasets: [
+                        {
+                            label: '실제 지출',
+                            data: budgetData.map(d => d.actualExpense),
+                            backgroundColor: 'rgba(239, 68, 68, 0.6)',
+                            borderColor: 'rgba(239, 68, 68, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: '회사 지원금',
+                            data: budgetData.map(d => d.companySupportAmount),
+                            backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                            borderColor: 'rgba(59, 130, 246, 1)',
+                            borderWidth: 1
+                        },
+                        {
+                            label: '동호회 부담',
+                            data: budgetData.map(d => d.clubBurden),
+                            backgroundColor: 'rgba(249, 115, 22, 0.6)',
+                            borderColor: 'rgba(249, 115, 22, 1)',
+                            borderWidth: 1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '₩' + (value / 1000) + 'k';
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${formatCurrency(context.raw)}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            const fundingCtx = document.getElementById('funding-ratio-chart').getContext('2d');
+            fundingChart = new Chart(fundingCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['회사 지원금', '동호회 부담'],
+                    datasets: [{
+                        data: [0, 0],
+                        backgroundColor: ['rgba(59, 130, 246, 0.7)', 'rgba(249, 115, 22, 0.7)'],
+                        borderColor: ['#ffffff'],
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const label = context.label || '';
+                                    const value = context.raw || 0;
+                                    const total = context.chart.getDatasetMeta(0).total;
+                                    const percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '0%';
+                                    return `${label}: ${formatCurrency(value)} (${percentage})`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        };
+
+        const updateCharts = (totalSupport, totalBurden) => {
+            if (!expenseChart || !fundingChart) return;
+            expenseChart.data.datasets[0].data = budgetData.map(d => d.actualExpense);
+            expenseChart.data.datasets[1].data = budgetData.map(d => d.companySupportAmount);
+            expenseChart.data.datasets[2].data = budgetData.map(d => d.clubBurden);
+            expenseChart.update();
+
+            fundingChart.data.datasets[0].data = [totalSupport, totalBurden];
+            fundingChart.update();
+        };
+
+        loadDataFromStorage();
+        clubBalanceInput.value = formatCurrency(parseNumericValue(clubBalanceInput.value));
+
+        clubBalanceInput.addEventListener('input', handleClubBalanceInput);
+        clubBalanceInput.addEventListener('blur', handleClubBalanceBlur);
+        saveButton.addEventListener('click', saveDataToStorage);
+
+        createCharts();
+        fullUpdate();
+    });
+</script>
+
+<!-- ================== 탭 전환 + 대진표 + 어드민 모드 스크립트 ================== -->
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const budgetSection = document.getElementById('budget-section');
+        const bracketSection = document.getElementById('bracket-section');
+        const tabBudget = document.getElementById('tab-budget');
+        const tabBracket = document.getElementById('tab-bracket');
+        const adminToggleBtn = document.getElementById('admin-toggle');
+
+        // 어드민 모드 여부 (localStorage에 저장)
+        let adminMode = localStorage.getItem('withersAdmin') === '1';
+
+        const activateBudgetTabStyle = () => {
+            tabBudget.classList.add('bg-white', 'border', 'border-slate-200', 'border-b-0', 'shadow-sm');
+            tabBudget.classList.remove('text-slate-500');
+            tabBracket.classList.remove('bg-white', 'border', 'border-slate-200', 'border-b-0', 'shadow-sm');
+            tabBracket.classList.add('text-slate-500');
+        };
+
+        const activateBracketTabStyle = () => {
+            tabBracket.classList.add('bg-white', 'border', 'border-slate-200', 'border-b-0', 'shadow-sm');
+            tabBracket.classList.remove('text-slate-500');
+            tabBudget.classList.remove('bg-white', 'border', 'border-slate-200', 'border-b-0', 'shadow-sm');
+            tabBudget.classList.add('text-slate-500');
+        };
+
+        const showBudget = () => {
+            if (!adminMode) return; // 어드민이 아니면 방어
+            budgetSection.classList.remove('hidden');
+            bracketSection.classList.add('hidden');
+            activateBudgetTabStyle();
+        };
+
+        const showBracket = () => {
+            budgetSection.classList.add('hidden');
+            bracketSection.classList.remove('hidden');
+            activateBracketTabStyle();
+        };
+
+        // 어드민 UI 적용
+        const applyAdminUI = () => {
+            if (adminMode) {
+                tabBudget.classList.remove('hidden');
+                adminToggleBtn.textContent = '🔓 어드민 모드 해제';
+                // 기본 화면: 예산 탭
+                showBudget();
+            } else {
+                tabBudget.classList.add('hidden'); // 탭 자체 숨김
+                showBracket(); // 일반 유저는 대진표만
+                adminToggleBtn.textContent = '🔒 어드민 모드';
+            }
+        };
+
+        tabBudget.addEventListener('click', showBudget);
+        tabBracket.addEventListener('click', showBracket);
+
+        adminToggleBtn.addEventListener('click', () => {
+            if (!adminMode) {
+                const code = prompt('어드민 코드를 입력하세요.');
+                if (code === 'cwc') {
+                    adminMode = true;
+                    localStorage.setItem('withersAdmin', '1');
+                    applyAdminUI();
+                } else if (code !== null) {
+                    alert('코드가 올바르지 않습니다.');
+                }
+            } else {
+                if (confirm('어드민 모드를 해제할까요? (예산 탭이 숨겨집니다)')) {
+                    adminMode = false;
+                    localStorage.setItem('withersAdmin', '0');
+                    applyAdminUI();
+                }
+            }
+        });
+
+        // 처음 로드 시 상태 반영
+        applyAdminUI();
+
+        // ===== 대진표 로직 =====
+        let bracketData = null;
+        let bracketSize = 16;
+        let seedsForDisplay = [];
+
+        // 🔹 단식/복식 모드
+        let matchType = 'single';
+        window.withersMatchType = matchType;
+
+        const playerInputEl   = document.getElementById("bracket-playerInput");
+        const generateBtn     = document.getElementById("bracket-generateBtn");
+        const resetBtn        = document.getElementById("bracket-resetBtn");
+        const seedContainer   = document.getElementById("bracket-seedContainer");
+        const bracketEl       = document.getElementById("bracket-bracket");
+        const bracketInnerEl  = document.getElementById("bracket-bracketInner");
+        const resultEl        = document.getElementById("bracket-result");
+        const winnerNameEl    = document.getElementById("bracket-winnerName");
+        const runnerUpNameEl  = document.getElementById("bracket-runnerUpName");
+
+        // 🔹 단식 / 복식 라디오 버튼
+        const matchTypeRadios = document.querySelectorAll('input[name="matchType"]');
+        matchTypeRadios.forEach((radio) => {
+            radio.addEventListener('change', (e) => {
+                matchType = e.target.value;          // 'single' or 'double'
+                window.withersMatchType = matchType;
+                // 모드 바뀌면 대진표 초기화
+                resetBracket();
+                if (window.rebuildAiPrompt) window.rebuildAiPrompt();
+            });
+        });
+
+        const shuffleArray = (array) => {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        };
+
+        const getBracketSize = (playerCount) => {
+            if (playerCount <= 2) return 2;
+            if (playerCount <= 4) return 4;
+            if (playerCount <= 8) return 8;
+            return 16;
+        };
+
+        const renderSeedTable = (players, size) => {
+            seedsForDisplay = players.slice();
+            let html = '<table class="w-full text-xs border border-slate-200 text-left">';
+            html += '<thead class="bg-slate-50 text-slate-600"><tr><th class="px-2 py-1 border-b border-slate-200">시드</th><th class="px-2 py-1 border-b border-slate-200">이름</th></tr></thead><tbody>';
+
+            for (let i = 0; i < size; i++) {
+                const name = players[i] || "";
+                const isBye = name === "부전승";
+                html += '<tr class="border-b border-slate-100">';
+                html += `<td class="px-2 py-1">${i + 1}</td>`;
+                if (name) {
+                    html += `<td class="px-2 py-1">${name}${isBye ? ' <span class="inline-block text-[10px] px-2 py-[1px] rounded-full bg-slate-100 text-slate-600">부전승</span>' : ''}</td>`;
+                } else {
+                    html += '<td class="px-2 py-1 text-slate-400">(빈 자리)</td>';
+                }
+                html += '</tr>';
+            }
+            html += '</tbody></table>';
+            html += '<p class="mt-1 text-[11px] text-slate-500">· 시드 번호는 16강 대진표에서의 자리입니다.<br>· 부전승은 경기를 치르지 않고 다음 라운드로 자동 진출합니다.</p>';
+            seedContainer.innerHTML = html;
+        };
+
+        const initBracketStructure = (size) => {
+            const rounds = [];
+            let currentSize = size;
+            while (currentSize >= 2) {
+                const matchCount = currentSize / 2;
+                const round = [];
+                for (let i = 0; i < matchCount; i++) {
+                    round.push({ players: ["", ""], winner: null });
+                }
+                rounds.push(round);
+                currentSize = matchCount;
+            }
+            return rounds;
+        };
+
+        const renderBracketDOM = () => {
+            bracketInnerEl.innerHTML = "";
+            if (!bracketData) return;
+
+            const roundNames = ["16강", "8강", "4강", "결승"];
+
+            const wrapper = document.createElement("div");
+            wrapper.className = "grid grid-flow-col auto-cols-[minmax(180px,1fr)] gap-3 min-w-[720px]";
+
+            bracketData.forEach((round, rIndex) => {
+                const roundDiv = document.createElement("div");
+                roundDiv.className = "flex flex-col gap-2";
+
+                const title = document.createElement("div");
+                title.className = "text-xs font-semibold text-slate-600 mb-1";
+                title.textContent = roundNames[rIndex] || `R${rIndex + 1}`;
+                roundDiv.appendChild(title);
+
+                round.forEach((match, mIndex) => {
+                    const matchDiv = document.createElement("div");
+                    matchDiv.className = "match border border-slate-200 bg-slate-50 rounded-lg px-2 py-1.5 flex flex-col gap-1.5";
+                    matchDiv.dataset.roundIndex = rIndex;
+                    matchDiv.dataset.matchIndex = mIndex;
+
+                    const header = document.createElement("div");
+                    header.className = "text-[11px] text-slate-500";
+                    header.textContent = `${roundNames[rIndex] || "R" + (rIndex + 1)} ${mIndex + 1}경기`;
+                    matchDiv.appendChild(header);
+
+                    for (let slotIndex = 0; slotIndex < 2; slotIndex++) {
+                        const slotDiv = document.createElement("div");
+                        const btn = document.createElement("button");
+                        btn.type = "button";
+                        btn.className = "player-btn";
+                        btn.dataset.playerSlot = slotIndex;
+
+                        const nameSpan = document.createElement("span");
+                        nameSpan.className = "player-name";
+                        nameSpan.textContent = match.players[slotIndex] || "";
+
+                        const seedSpan = document.createElement("span");
+                        seedSpan.className = "player-seed";
+
+                        btn.appendChild(nameSpan);
+                        btn.appendChild(seedSpan);
+                        slotDiv.appendChild(btn);
+                        matchDiv.appendChild(slotDiv);
+                    }
+
+                    roundDiv.appendChild(matchDiv);
+                });
+
+                wrapper.appendChild(roundDiv);
+            });
+
+            bracketInnerEl.appendChild(wrapper);
+            bracketEl.classList.remove("hidden");
+        };
+
+        const refreshMatchTexts = () => {
+            if (!bracketData) return;
+
+            const matchDivs = bracketInnerEl.querySelectorAll(".match");
+            matchDivs.forEach(matchDiv => {
+                const rIndex = parseInt(matchDiv.dataset.roundIndex, 10);
+                const mIndex = parseInt(matchDiv.dataset.matchIndex, 10);
+                const data = bracketData[rIndex][mIndex];
+
+                matchDiv.classList.remove("finished");
+                const buttons = matchDiv.querySelectorAll(".player-btn");
+
+                buttons.forEach((btn, slot) => {
+                    const name = data.players[slot] || "";
+                    const nameSpan = btn.querySelector(".player-name");
+                    const seedSpan = btn.querySelector(".player-seed");
+
+                    btn.classList.remove("winner", "empty");
+                    nameSpan.textContent = name || "대기";
+                    seedSpan.textContent = "";
+
+                    if (!name) {
+                        btn.classList.add("empty");
+                        nameSpan.style.color = "#999";
+                    } else {
+                        nameSpan.style.color = "#111827";
+                        if (name === "부전승") {
+                            seedSpan.textContent = "부전승";
+                            seedSpan.style.color = "#b91c1c";
+                        } else {
+                            const seedIndex = seedsForDisplay.indexOf(name);
+                            if (seedIndex !== -1) {
+                                seedSpan.textContent = `#${seedIndex + 1}`;
+                                seedSpan.style.color = "#6b7280";
+                            }
+                        }
+                    }
+                });
+
+                if (data.winner) {
+                    const winnerButtons = Array.from(buttons).filter(
+                        (btn) => btn.querySelector(".player-name").textContent === data.winner
+                    );
+                    if (winnerButtons.length > 0) {
+                        winnerButtons[0].classList.add("winner");
+                    }
+                    matchDiv.classList.add("finished");
+                }
+            });
+        };
+
+        // 🔁 부전승 자동 진출 (연쇄 처리 + "부전승"만 bye로 인정)
+        const autoAdvanceByes = () => {
+            if (!bracketData) return;
+
+            let changed = true;
+            while (changed) {
+                changed = false;
+
+                for (let rIndex = 0; rIndex < bracketData.length; rIndex++) {
+                    const round = bracketData[rIndex];
+
+                    for (let mIndex = 0; mIndex < round.length; mIndex++) {
+                        const match = round[mIndex];
+                        const [p1, p2] = match.players;
+
+                        // 이미 승자 있으면 패스
+                        if (match.winner) continue;
+
+                        // 오직 "부전승" 문자열만 bye로 인정
+                        const p1IsBye = p1 === "부전승";
+                        const p2IsBye = p2 === "부전승";
+
+                        let autoWinner = null;
+                        if (p1IsBye && !p2IsBye) {
+                            autoWinner = p2;
+                        } else if (p2IsBye && !p1IsBye) {
+                            autoWinner = p1;
+                        } else {
+                            // 둘 다 사람 / 둘 다 부전승 / 둘 다 빈칸 -> 자동 처리 안 함
+                            continue;
+                        }
+
+                        // 승자 기록
+                        match.winner = autoWinner;
+
+                        // 다음 라운드에 자동 배치
+                        if (rIndex < bracketData.length - 1) {
+                            const nextRound = bracketData[rIndex + 1];
+                            const nextMatchIndex = Math.floor(mIndex / 2);
+                            const slotInNext = mIndex % 2;
+
+                            if (!nextRound[nextMatchIndex].players[slotInNext]) {
+                                nextRound[nextMatchIndex].players[slotInNext] = autoWinner;
+                            }
+                        }
+
+                        changed = true;
+                    }
+                }
+            }
+        };
+
+        const updateChampionDisplay = () => {
+            if (!bracketData) return;
+
+            const lastRoundIndex = bracketData.length - 1;
+            const finalMatch = bracketData[lastRoundIndex][0];
+
+            if (!finalMatch.winner) {
+                winnerNameEl.textContent = "-";
+                runnerUpNameEl.textContent = "-";
+                resultEl.classList.add("hidden");
+                return;
+            }
+
+            const winner = finalMatch.winner;
+            const [p1, p2] = finalMatch.players;
+            let runnerUp = "-";
+            if (p1 && p2) {
+                runnerUp = p1 === winner ? p2 : p1;
+            }
+
+            winnerNameEl.textContent = winner;
+            runnerUpNameEl.textContent = runnerUp;
+            resultEl.classList.remove("hidden");
+        };
+
+        const handleWinnerClick = (matchDiv, clickedBtn) => {
+            const rIndex = parseInt(matchDiv.dataset.roundIndex, 10);
+            const mIndex = parseInt(matchDiv.dataset.matchIndex, 10);
+            const data = bracketData[rIndex][mIndex];
+
+            const nameSpan = clickedBtn.querySelector(".player-name");
+            const clickedName = nameSpan.textContent.trim();
+            if (!clickedName || clickedName === "대기") return;
+
+            data.winner = clickedName;
+
+            if (rIndex < bracketData.length - 1) {
+                const nextRound = bracketData[rIndex + 1];
+                const nextMatchIndex = Math.floor(mIndex / 2);
+                const slotInNext = mIndex % 2;
+                nextRound[nextMatchIndex].players[slotInNext] = clickedName;
+            }
+
+            autoAdvanceByes();
+            refreshMatchTexts();
+            updateChampionDisplay();
+            if (window.rebuildAiPrompt) window.rebuildAiPrompt();
+        };
+
+        const resetBracket = () => {
+            bracketData = null;
+            seedsForDisplay = [];
+            bracketInnerEl.innerHTML = "";
+            bracketEl.classList.add("hidden");
+            resultEl.classList.add("hidden");
+            winnerNameEl.textContent = "-";
+            runnerUpNameEl.textContent = "-";
+            seedContainer.innerHTML = `
+                <p class="text-xs text-slate-500">
+                    왼쪽에 참가자 이름을 입력하고<br>
+                    <b>「랜덤 추첨 &amp; 대진표 생성」</b> 버튼을 눌러주세요.
+                </p>`;
+            if (window.rebuildAiPrompt) window.rebuildAiPrompt();
+        };
+
+        generateBtn.addEventListener("click", () => {
+            const raw = playerInputEl.value
+                .split("\n")
+                .map(v => v.trim())
+                .filter(v => v.length > 0);
+
+            if (raw.length < 2) {
+                alert("최소 2명 이상 입력해야 대진표를 만들 수 있어요.");
+                return;
+            }
+
+            let entries; // 단식이면 '이름', 복식이면 'A / B' 팀 이름들
+
+            if (matchType === 'single') {
+                // 🔹 단식: 기존처럼 그냥 셔플
+                entries = shuffleArray([...raw]);
+            } else {
+                // 🔹 복식: 두 명씩 한 팀으로 묶기
+                if (raw.length < 4) {
+                    alert("복식은 최소 4명(2팀) 이상이어야 합니다.");
+                    return;
+                }
+                if (raw.length % 2 !== 0) {
+                    alert(`복식은 짝수 인원이 필요합니다. (현재 ${raw.length}명)`);
+                    return;
+                }
+
+                const shuffled = shuffleArray([...raw]);
+                const teams = [];
+                for (let i = 0; i < shuffled.length; i += 2) {
+                    teams.push(`${shuffled[i]} / ${shuffled[i + 1]}`);
+                }
+                entries = teams;
+            }
+
+            // 공통: 엔트리 수 제한
+            if (entries.length > 16) {
+                alert(`${matchType === 'single' ? '단식' : '복식'}은 최대 16${matchType === 'single' ? '명' : '팀'}까지만 지원합니다. 앞에서 16개만 사용합니다.`);
+                entries = entries.slice(0, 16);
+            }
+
+            const size = getBracketSize(entries.length);
+            bracketSize = size;
+
+            // 부전승 채워 넣기
+            const players = [...entries];
+            const needed = size - players.length;
+            for (let i = 0; i < needed; i++) {
+                players.push("부전승");
+            }
+
+            // 브래킷 구조 초기화 + 1라운드 배치
+            bracketData = initBracketStructure(size);
+            const firstRound = bracketData[0];
+            for (let i = 0; i < firstRound.length; i++) {
+                firstRound[i].players[0] = players[i * 2] || "";
+                firstRound[i].players[1] = players[i * 2 + 1] || "";
+            }
+
+            // 부전승 자동 진출 + UI 갱신
+            autoAdvanceByes();
+            renderSeedTable(players, size);
+            renderBracketDOM();
+            refreshMatchTexts();
+            updateChampionDisplay();
+            if (window.rebuildAiPrompt) window.rebuildAiPrompt();
+        });
+
+        resetBtn.addEventListener("click", () => {
+            resetBracket();
+            playerInputEl.value = "";
+            if (window.rebuildAiPrompt) window.rebuildAiPrompt();
+        });
+
+        bracketInnerEl.addEventListener("click", (e) => {
+            const btn = e.target.closest(".player-btn");
+            if (!btn || btn.classList.contains("empty")) return;
+            const matchDiv = btn.closest(".match");
+            if (!matchDiv) return;
+            handleWinnerClick(matchDiv, btn);
+        });
+    });
+</script>
+
+</body>
+</html>
