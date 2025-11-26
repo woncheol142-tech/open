@@ -1177,13 +1177,15 @@ generateBtn.addEventListener("click", () => {
         return;
     }
 
-    let realEntries; // 실제 엔트리(사람/팀)만 담는 배열
+    // -----------------------------
+    // 🔹 단식 / 복식 처리
+    // -----------------------------
+    let realEntries = [];
 
-    if (matchType === 'single') {
-        // 🔹 단식: 참가자만 섞기
+    if (matchType === "single") {
         realEntries = shuffleArray([...raw]);
     } else {
-        // 🔹 복식: 두 명씩 팀 만들기
+        // 복식
         if (raw.length < 4) {
             alert("복식은 최소 4명(2팀) 이상이어야 합니다.");
             return;
@@ -1194,53 +1196,65 @@ generateBtn.addEventListener("click", () => {
         }
 
         const shuffled = shuffleArray([...raw]);
-        const teams = [];
         for (let i = 0; i < shuffled.length; i += 2) {
-            teams.push(`${shuffled[i]} / ${shuffled[i + 1]}`);
+            realEntries.push(`${shuffled[i]} / ${shuffled[i + 1]}`);
         }
-        realEntries = teams;
     }
 
-            // 공통: 엔트리 수 제한
-            if (entries.length > 16) {
-                alert(`${matchType === 'single' ? '단식' : '복식'}은 최대 16${matchType === 'single' ? '명' : '팀'}까지만 지원합니다. 앞에서 16개만 사용합니다.`);
-                entries = entries.slice(0, 16);
-            }
+    // -----------------------------
+    // 🔹 엔트리 제한 (16명 또는 16팀)
+    // -----------------------------
+    if (realEntries.length > 16) {
+        alert(`${matchType === "single" ? "단식" : "복식"}은 최대 16까지만 지원합니다.`);
+        realEntries = realEntries.slice(0, 16);
+    }
 
-            const size = getBracketSize(entries.length);
-            bracketSize = size;
+    // -----------------------------
+    // 🔹 필요한 브래킷 사이즈 결정
+    // -----------------------------
+    const size = getBracketSize(realEntries.length);
+    bracketSize = size;
 
-
-     // 🔹 실제 엔트리를 앞에 채우고, 남는 칸 뒤에만 부전승 추가
+    // -----------------------------
+    // 🔹 부전승 계산
+    // -----------------------------
+    const byeCount = size - realEntries.length;
     const players = [...realEntries];
-    const needed = size - players.length;
-    for (let i = 0; i < needed; i++) {
+
+    for (let i = 0; i < byeCount; i++) {
         players.push("부전승");
     }
-    // players 예) [머, 추, 미, 아, 하, 부전승, 부전승, 부전승]
 
-    // 🔹 브래킷 구조 초기화 + 1라운드 배치
+    // -----------------------------
+    // 🔹 브래킷 구조 초기화
+    // -----------------------------
     bracketData = initBracketStructure(size);
+
+    // -----------------------------
+    // 🔹 16강 자리에 순서대로 배치
+    // -----------------------------
     const firstRound = bracketData[0];
     for (let i = 0; i < firstRound.length; i++) {
-        firstRound[i].players[0] = players[i * 2] || "";
-        firstRound[i].players[1] = players[i * 2 + 1] || "";
+        firstRound[i].players[0] = players[i * 2] ?? "";
+        firstRound[i].players[1] = players[i * 2 + 1] ?? "";
     }
 
-            // 부전승 자동 진출 + UI 갱신
-            autoAdvanceByes();
-            renderSeedTable(players, size);
-            renderBracketDOM();
-            refreshMatchTexts();
-            updateChampionDisplay();
-            if (window.rebuildAiPrompt) window.rebuildAiPrompt();
-        });
+    // -----------------------------
+    // 🔹 부전승 자동 승리
+    // -----------------------------
+    autoAdvanceByes();
 
-        resetBtn.addEventListener("click", () => {
-            resetBracket();
-            playerInputEl.value = "";
-            if (window.rebuildAiPrompt) window.rebuildAiPrompt();
-        });
+    // -----------------------------
+    // 🔹 렌더링
+    // -----------------------------
+    renderSeedTable(players, size);
+    renderBracketDOM();
+    refreshMatchTexts();
+    updateChampionDisplay();
+
+    if (window.rebuildAiPrompt) window.rebuildAiPrompt();
+});
+
 
         bracketInnerEl.addEventListener("click", (e) => {
             const btn = e.target.closest(".player-btn");
