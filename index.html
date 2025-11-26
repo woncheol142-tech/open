@@ -1201,21 +1201,49 @@
             const size = getBracketSize(entries.length);
             bracketSize = size;
 
-            // 부전승 채워 넣기
-            const players = [...entries];
-            const needed = size - players.length;
-            for (let i = 0; i < needed; i++) {
-                players.push("부전승");
-            }
+    // 🔹 실제 참가자 / 부전승 따로 관리
+    const needed = size - entries.length;          // 필요한 부전승 수
+    const realPlayers = [...entries];              // 이미 단식/복식에 맞게 셔플된 엔트리
+    const byes = Array(needed).fill("부전승");     // 부전승 목록
 
-            // 브래킷 구조 초기화 + 1라운드 배치
-            bracketData = initBracketStructure(size);
-            const firstRound = bracketData[0];
-            for (let i = 0; i < firstRound.length; i++) {
-                firstRound[i].players[0] = players[i * 2] || "";
-                firstRound[i].players[1] = players[i * 2 + 1] || "";
-            }
+    // 🔹 "각 경기당 부전승은 최대 1명"이 되도록 재배치
+    const matchCount = size / 2;
+    const players = [];
+    let realIdx = 0;
+    let byeIdx = 0;
 
+    for (let m = 0; m < matchCount; m++) {
+        let a = "";
+        let b = "";
+
+        if (byeIdx < byes.length) {
+            // 먼저 부전승 1명 배치 + 실제 참가자 1명
+            a = byes[byeIdx++];
+            if (realIdx < realPlayers.length) {
+                b = realPlayers[realIdx++];
+            }
+        } else {
+            // 남은 건 전부 실제 참가자끼리 배치
+            if (realIdx < realPlayers.length) {
+                a = realPlayers[realIdx++];
+            }
+            if (realIdx < realPlayers.length) {
+                b = realPlayers[realIdx++];
+            }
+        }
+
+        // 빈 값이 생기면 안전하게 부전승으로 채우기
+        players.push(a || "부전승");
+        players.push(b || "부전승");
+    }
+
+    // 🔹 브래킷 구조 초기화 + 1라운드 배치
+    bracketData = initBracketStructure(size);
+    const firstRound = bracketData[0];
+    for (let i = 0; i < firstRound.length; i++) {
+        firstRound[i].players[0] = players[i * 2] || "";
+        firstRound[i].players[1] = players[i * 2 + 1] || "";
+    }
             // 부전승 자동 진출 + UI 갱신
             autoAdvanceByes();
             renderSeedTable(players, size);
