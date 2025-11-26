@@ -1124,7 +1124,7 @@
 
             const nameSpan = clickedBtn.querySelector(".player-name");
             const clickedName = nameSpan.textContent.trim();
-            if (!clickedName || clickedName === "대기") return;
+            if (!clickedName || clickedName === "대기" || clickedName === "부전승") return;
 
             data.winner = clickedName;
 
