@@ -930,64 +930,74 @@
             return rounds;
         };
 
-        const renderBracketDOM = () => {
-            bracketInnerEl.innerHTML = "";
-            if (!bracketData) return;
+const renderBracketDOM = () => {
+    bracketInnerEl.innerHTML = "";
+    if (!bracketData) return;
 
-            const roundNames = ["16강", "8강", "4강", "결승"];
+    const roundNames = ["16강", "8강", "4강", "결승"];
 
-            const wrapper = document.createElement("div");
-            wrapper.className = "grid grid-flow-col auto-cols-[minmax(180px,1fr)] gap-3 min-w-[720px]";
+    const wrapper = document.createElement("div");
+    wrapper.className = "grid grid-flow-col auto-cols-[minmax(180px,1fr)] gap-3 min-w-[720px]";
 
-            bracketData.forEach((round, rIndex) => {
-                const roundDiv = document.createElement("div");
-                roundDiv.className = "flex flex-col gap-2";
+    bracketData.forEach((round, rIndex) => {
+        const roundDiv = document.createElement("div");
+        roundDiv.className = "flex flex-col gap-2";
 
-                const title = document.createElement("div");
-                title.className = "text-xs font-semibold text-slate-600 mb-1";
-                title.textContent = roundNames[rIndex] || `R${rIndex + 1}`;
-                roundDiv.appendChild(title);
+        const title = document.createElement("div");
+        title.className = "text-xs font-semibold text-slate-600 mb-1";
+        title.textContent = roundNames[rIndex] || `R${rIndex + 1}`;
+        roundDiv.appendChild(title);
 
-                round.forEach((match, mIndex) => {
-                    const matchDiv = document.createElement("div");
-                    matchDiv.className = "match border border-slate-200 bg-slate-50 rounded-lg px-2 py-1.5 flex flex-col gap-1.5";
-                    matchDiv.dataset.roundIndex = rIndex;
-                    matchDiv.dataset.matchIndex = mIndex;
+        round.forEach((match, mIndex) => {
+            const p1 = match.players[0];
+            const p2 = match.players[1];
 
-                    const header = document.createElement("div");
-                    header.className = "text-[11px] text-slate-500";
-                    header.textContent = `${roundNames[rIndex] || "R" + (rIndex + 1)} ${mIndex + 1}경기`;
-                    matchDiv.appendChild(header);
+            // ✅ 16강에서 "부전승 vs 부전승" 경기면 아예 카드 안 그림
+            if (rIndex === 0 && p1 === "부전승" && p2 === "부전승") {
+                return; // 이 매치는 DOM에 표시 안 함
+            }
 
-                    for (let slotIndex = 0; slotIndex < 2; slotIndex++) {
-                        const slotDiv = document.createElement("div");
-                        const btn = document.createElement("button");
-                        btn.type = "button";
-                        btn.className = "player-btn";
-                        btn.dataset.playerSlot = slotIndex;
+            const matchDiv = document.createElement("div");
+            matchDiv.className =
+                "match border border-slate-200 bg-slate-50 rounded-lg px-2 py-1.5 flex flex-col gap-1.5";
+            matchDiv.dataset.roundIndex = rIndex;
+            matchDiv.dataset.matchIndex = mIndex;
 
-                        const nameSpan = document.createElement("span");
-                        nameSpan.className = "player-name";
-                        nameSpan.textContent = match.players[slotIndex] || "";
+            const header = document.createElement("div");
+            header.className = "text-[11px] text-slate-500";
+            header.textContent = `${roundNames[rIndex] || "R" + (rIndex + 1)} ${mIndex + 1}경기`;
+            matchDiv.appendChild(header);
 
-                        const seedSpan = document.createElement("span");
-                        seedSpan.className = "player-seed";
+            for (let slotIndex = 0; slotIndex < 2; slotIndex++) {
+                const slotDiv = document.createElement("div");
+                const btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "player-btn";
+                btn.dataset.playerSlot = slotIndex;
 
-                        btn.appendChild(nameSpan);
-                        btn.appendChild(seedSpan);
-                        slotDiv.appendChild(btn);
-                        matchDiv.appendChild(slotDiv);
-                    }
+                const nameSpan = document.createElement("span");
+                nameSpan.className = "player-name";
+                nameSpan.textContent = match.players[slotIndex] || "";
 
-                    roundDiv.appendChild(matchDiv);
-                });
+                const seedSpan = document.createElement("span");
+                seedSpan.className = "player-seed";
 
-                wrapper.appendChild(roundDiv);
-            });
+                btn.appendChild(nameSpan);
+                btn.appendChild(seedSpan);
+                slotDiv.appendChild(btn);
+                matchDiv.appendChild(slotDiv);
+            }
 
-            bracketInnerEl.appendChild(wrapper);
-            bracketEl.classList.remove("hidden");
-        };
+            roundDiv.appendChild(matchDiv);
+        });
+
+        wrapper.appendChild(roundDiv);
+    });
+
+    bracketInnerEl.appendChild(wrapper);
+    bracketEl.classList.remove("hidden");
+};
+
 
         const refreshMatchTexts = () => {
             if (!bracketData) return;
@@ -1041,56 +1051,55 @@
         };
 
         // 🔁 부전승 자동 진출 (연쇄 처리 + "부전승"만 bye로 인정)
-        const autoAdvanceByes = () => {
-            if (!bracketData) return;
+ const autoAdvanceByes = () => {
+    if (!bracketData) return;
 
-            let changed = true;
-            while (changed) {
-                changed = false;
+    for (let rIndex = 0; rIndex < bracketData.length; rIndex++) {
+        const round = bracketData[rIndex];
 
-                for (let rIndex = 0; rIndex < bracketData.length; rIndex++) {
-                    const round = bracketData[rIndex];
+        for (let mIndex = 0; mIndex < round.length; mIndex++) {
+            const match = round[mIndex];
+            const [p1, p2] = match.players;
 
-                    for (let mIndex = 0; mIndex < round.length; mIndex++) {
-                        const match = round[mIndex];
-                        const [p1, p2] = match.players;
+            // 이미 승자 있으면 스킵
+            if (match.winner) continue;
 
-                        // 이미 승자 있으면 패스
-                        if (match.winner) continue;
+            const p1IsBye = p1 === "부전승";
+            const p2IsBye = p2 === "부전승";
 
-                        // 오직 "부전승" 문자열만 bye로 인정
-                        const p1IsBye = p1 === "부전승";
-                        const p2IsBye = p2 === "부전승";
+            let autoWinner = null;
 
-                        let autoWinner = null;
-                        if (p1IsBye && !p2IsBye) {
-                            autoWinner = p2;
-                        } else if (p2IsBye && !p1IsBye) {
-                            autoWinner = p1;
-                        } else {
-                            // 둘 다 사람 / 둘 다 부전승 / 둘 다 빈칸 -> 자동 처리 안 함
-                            continue;
-                        }
+            // ✅ 둘 다 부전승인 경기 (예: 14명일 때 16강 8경기)
+            if (p1IsBye && p2IsBye) {
+                autoWinner = "부전승";
+            }
+            // ✅ 1명만 부전승인 경기
+            else if (p1IsBye && !p2IsBye) {
+                autoWinner = p2;
+            } else if (p2IsBye && !p1IsBye) {
+                autoWinner = p1;
+            } else {
+                // 사람 vs 사람이면 자동 처리 안 함
+                continue;
+            }
 
-                        // 승자 기록
-                        match.winner = autoWinner;
+            // 승자 기록
+            match.winner = autoWinner;
 
-                        // 다음 라운드에 자동 배치
-                        if (rIndex < bracketData.length - 1) {
-                            const nextRound = bracketData[rIndex + 1];
-                            const nextMatchIndex = Math.floor(mIndex / 2);
-                            const slotInNext = mIndex % 2;
+            // 다음 라운드로 보내기
+            if (rIndex < bracketData.length - 1) {
+                const nextRound     = bracketData[rIndex + 1];
+                const nextMatchIndex = Math.floor(mIndex / 2);
+                const slotInNext     = mIndex % 2;
 
-                            if (!nextRound[nextMatchIndex].players[slotInNext]) {
-                                nextRound[nextMatchIndex].players[slotInNext] = autoWinner;
-                            }
-                        }
-
-                        changed = true;
-                    }
+                if (!nextRound[nextMatchIndex].players[slotInNext]) {
+                    nextRound[nextMatchIndex].players[slotInNext] = autoWinner;
                 }
             }
-        };
+        }
+    }
+};
+
 
         const updateChampionDisplay = () => {
             if (!bracketData) return;
